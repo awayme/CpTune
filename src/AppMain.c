@@ -31,10 +31,18 @@
 #define appVersionNum			0x01
 #define appPrefID				0x00
 #define appPrefVersionNum		0x01
-#define appCfgFile				"/PALM/CpTuneCfg.conf"
-#define volumeRefNumber			1;
+#define appCfgFile				"/Palm/CpTuneCfg.conf"
+#define appMp3PathCfg			"/Palm/CpTuneMp3PathCfg."
+#define appChangeMp3File		"interval.mp3"
+//#define volumeRefNumber			1;//A?
+#define volumeRefNumber			2;//B?
 
-char gMp3Path[50];
+char gConfStr[50];
+char gClipboard[30] = {'\n'};
+char gVolumeName[2];
+char gFPathName[50];
+
+char gPathCfgFileIndex=0;
 
 /***********************************************************************
  *
@@ -63,6 +71,92 @@ void MsgDraw(const char* msg)
 	//StrPrintF(buf, "%d", pref.accentedChr);	
 	WinDrawChars(msg, StrLen(msg), 5, x+=10);	
 }
+
+/***********************************************************************
+ *
+ * FUNCTION:    
+ *
+ * DESCRIPTION: 
+ *
+ * PARAMETERS:  
+ *
+ * RETURNED:    
+ *
+ * REVISION HISTORY:
+ *
+ *
+ ***********************************************************************/
+Err ReadMp3PathCfg()
+{
+	Err err = errNone;
+	Char *fileName = appMp3PathCfg;
+	char namebuf[50]= {'\n'};
+	
+	Char *data;
+	FileRef fileRef;
+	UInt32 fileSize;
+	
+	UInt16 volRefNum = volumeRefNumber;
+	
+	strcpy(namebuf, fileName);
+	namebuf[StrLen(fileName)]=gPathCfgFileIndex;
+	
+	fileName = namebuf;	
+	
+	MsgDraw(fileName);
+		
+	err = VFSFileOpen(volRefNum, fileName, vfsModeRead, &fileRef);
+	//StrPrintF(buf, "Err code:%d", err);	
+	//MsgDraw(buf);
+
+	switch(err)
+	{
+		//DEBUG
+		//char buf[50];
+			
+		case vfsErrFileNotFound:
+			MsgDraw("Error:PathCfg File Not Found");
+			break;
+		case errNone:
+			err = VFSFileSize(fileRef, &fileSize);
+			if(err)
+			{
+				MsgDraw("Error:PathCfg File Size error");
+				return err;
+			}
+			data = MemPtrNew(fileSize + 1);
+			if(!data)
+			{
+				MsgDraw("Error:Out of memory");
+				return err;
+			}
+			//MemSet(data, fileSize + 1, 0);
+			data[fileSize + 1] = '\0';		
+				
+			err = VFSFileRead(fileRef, fileSize, data, NULL);
+			if(err == vfsErrFileEOF)
+			{
+				MsgDraw("Error:PathCfg File No Data");	
+				return err;
+			}
+			
+			VFSFileClose(fileRef);		
+				
+			//StrPrintF(buf, "sizeof:%d", StrLen(data));	
+			//MsgDraw(buf);		
+						
+			//memcpy(gConfStr, data, fileSize + 1);
+			memcpy(gConfStr, data, fileSize);
+			MemPtrFree(data);
+			
+			return err;		
+		default:
+			MsgDraw("Error:PathCfg File Operation Error");	
+			return vfsErrorClass;
+	}
+	
+	return err;
+}
 /***********************************************************************
  *
  * FUNCTION:    
@@ -88,13 +182,19 @@ Err ReadCfg()
 	
 	UInt16 volRefNum = volumeRefNumber;
 	
-	//char buf[50];
+	
+	MsgDraw(fileName);
+		
 	err = VFSFileOpen(volRefNum, fileName, vfsModeRead, &fileRef);
+
 	//StrPrintF(buf, "Err code:%d", err);	
 	//MsgDraw(buf);
 
 	switch(err)
 	{
+		//DEBUG
+		//char buf[50];
+			
 		case vfsErrFileNotFound:
 			MsgDraw("Error:Cfg File Not Found");
 			break;
@@ -112,17 +212,23 @@ Err ReadCfg()
 				return err;
 			}
 			//MemSet(data, fileSize + 1, 0);
-			data[fileSize + 1] = '\0';
+			data[fileSize + 1] = '\0';		
+				
 			err = VFSFileRead(fileRef, fileSize, data, NULL);
 			if(err == vfsErrFileEOF)
 			{
 				MsgDraw("Error:Cfg File No Data");	
+				VFSFileClose(fileRef);	
 				return err;
 			}
 			
-			VFSFileClose(fileRef);			
-			//memcpy(gMp3Path, data, fileSize + 1);
-			memcpy(gMp3Path, data, fileSize);
+			VFSFileClose(fileRef);		
+				
+			gPathCfgFileIndex = data[0];
+			//debug
+			//MsgDraw("Cfg File index:");
+			//MsgDraw(data);
+						
 			MemPtrFree(data);
 			
 			return err;		
@@ -147,20 +253,160 @@ Err ReadCfg()
  * REVISION HISTORY:
  *
  *
+ ***********************************************************************/
+Err WriteCfg(char index)
+{
+	//DEBUG
+	char buf[50] = {'\n'};
+			
+	Err err = errNone;
+	Char *fileName = appCfgFile;
+	
+	FileRef fileRef;
+	
+	UInt16 volRefNum = volumeRefNumber;
+	
+	MsgDraw(appCfgFile);
+		
+	err = VFSFileOpen(volRefNum, fileName, vfsModeWrite, &fileRef);
+	//StrPrintF(buf, "Err code:%d", err);	
+	//MsgDraw(buf);
+
+	switch(err)
+	{
+		case vfsErrFileNotFound:
+			MsgDraw("Error:Cfg File Not Found");
+			break;
+		case errNone:
+			err = VFSFileWrite(fileRef, 1, &index, NULL);
+			if(err)
+			{
+				case vfsErrIsADirectory:
+				case vfsErrVolumeFull:
+				default:
+					MsgDraw("Error:write Cfg File error");
+					    
+					//DEBUG
+					StrPrintF(buf, "sizeof:%d", err);	
+					//MsgDraw(buf);  	
+					VFSFileClose(fileRef);		
+					return err;
+			}
+			
+			MsgDraw("Cfg File writed");
+			
+			VFSFileClose(fileRef);		
+			
+			return err;		
+	}
+	
+	return err;
+}
+/***********************************************************************
+ *
+ * FUNCTION:    
+ *
+ * DESCRIPTION: 
+ *
+ * PARAMETERS:  
+ *
+ * RETURNED:    
+ *
+ * REVISION HISTORY:
+ *
+ *
+ ***********************************************************************/	
+void prepareFilePath()
+{
+	char buf[50] = {'\n'};	
+	char *p;
+	
+
+		
+	//char buffer[30] = {'\n'};
+	char *vfsAudioDir;
+	
+	UInt16 length;
+	void *mh;
+	char *cp;	
+	
+	//clip
+	mh = ClipboardGetItem (clipboardText, &length);
+	if (!mh)
+	{
+		MsgDraw("Error:Clipboard Get Item Error");
+		return;
+	}
+
+	//????????
+  	MsgDraw("#Conf String:");
+  	MsgDraw(gConfStr);	
+
+	//???????
+	cp = MemHandleLock(mh);
+    memcpy(gClipboard, cp, length);
+    MemHandleUnlock(mh);
+    
+    MsgDraw("#Clipboard:");  	
+  	MsgDraw(gClipboard);  
+    
+	//DEBUG
+	//MsgDraw("#Debug:");
+	//StrPrintF(buf, "sizeof:%d", gLnch);	
+	//MsgDraw(buf);  	    
+      	
+  	//replace
+	p = StrChr(gConfStr,'%');
+	//??????????buf
+    memcpy(buf, p, StrLen(p));
+	//MsgDraw("Db:buf:");	//debug  	
+	//MsgDraw(buf);	//debug  	    
+	//StrPrintF(buf, "sizeof:%d", StrLen(p));	
+	//MsgDraw(StrChr(gConfStr,'%'));
+	//???????
+	memcpy(p, gClipboard, StrLen(gClipboard));
+	//MsgDraw("Db:cat clipboard:");	//debug  	
+	//MsgDraw(gConfStr);	//debug  	
+	
+	memcpy(&p[StrLen(gClipboard)],&buf[1], StrLen(buf)-1);
+	 
+	//MsgDraw(gFPathName);	  	
+  	
+  	//Volume
+	gVolumeName[0] = gConfStr[0];
+	gVolumeName[1] = gConfStr[1];	
+	 
+	//Path name 	
+	vfsAudioDir = &gConfStr[2];
+	//MsgDraw(&gConfStr[2]);	
+	strcpy(gFPathName, vfsAudioDir);
+	//StrCat(gFPathName, gClipboard);   	
+	//MsgDraw("#full name:"); 
+	//MsgDraw(&gFPathName[10]);	//debug
+	//MsgDraw(gFPathName);
+}
+/***********************************************************************
+ *
+ * FUNCTION:    
+ *
+ * DESCRIPTION: 
+ *
+ * PARAMETERS:  
+ *
+ * RETURNED:    
+ *
+ * REVISION HISTORY:
+ *
+ *
  ***********************************************************************/		
 void playMP3()
 {
 	//const char vfsVolumeName[] = "b:";
-	char vfsVolumeName[2];
-	char vfsFName[50];
+
+
 	//const char *vfsAudioDir = "/Audio/English/sentences/";
-	char *vfsAudioDir;
-	char buffer[30] = {'\n'};
-	
-	UInt16 length;
-	void *mh;
-	char *cp;
-	
+
+
 	/*
 	const char VN[] = "b:";
 	char buf[50];
@@ -168,37 +414,16 @@ void playMP3()
 	MsgDraw(buf);
 	*/
 	
-	vfsVolumeName[0] = gMp3Path[0];
-	vfsVolumeName[1] = gMp3Path[1];	
-	vfsAudioDir = &gMp3Path[2];
-			
-	strcpy(vfsFName, vfsAudioDir);
+	//char buf[50]
 
-	mh = ClipboardGetItem (clipboardText, &length);
-	if (!mh)
-	{
-		MsgDraw("Error:Clipboard Get Item Error");
-		return;
-	}
-	
-  	MsgDraw("#Path:");
-  	MsgDraw(gMp3Path);	
-  	
-	cp = MemHandleLock(mh);
-    memcpy(buffer, cp, length);
-    MemHandleUnlock(mh);
-	StrCat(vfsFName, buffer);   
-  	
-  	MsgDraw("#File:");  	
-  	MsgDraw(buffer);
     MsgDraw("#Launching pTune");
     if(PocketTunesStart() ==  errNone)
 	{
 		if(PocketTunesIsRunning())
 		{
 			MsgDraw("#playing:");		
-		    MsgDraw(vfsFName);	
-			if(PocketTunesOpenFile(vfsVolumeName, vfsFName, kPtunesOpenInterrupt) != errNone)
+		    MsgDraw(gFPathName);	
+			if(PocketTunesOpenFile(gVolumeName, gFPathName, kPtunesOpenInterrupt) != errNone)
 				MsgDraw("Error:PocketTunes Open File Error");
 		}	
 		else
@@ -207,7 +432,7 @@ void playMP3()
 	else
 			MsgDraw("Error:PocketTunes Start Error");
 	
-	if(vfsVolumeName[0] >= 'A' && vfsVolumeName[0] <= 'Z')
+	if(gVolumeName[0] >= 'A' && gVolumeName[0] <= 'Z')
 		if(PocketTunesDisplayConsole() != errNone)
 		{
 			MsgDraw("Error:PocketTunes Console Error");
@@ -240,7 +465,6 @@ static Boolean MainFormDoCommand(UInt16 command)
 			FrmDeleteForm(pForm);
 			handled = true;
 			break;
-
 	}
 	
 	return handled;
@@ -267,7 +491,10 @@ static Boolean MainFormHandleEvent(EventType* pEvent)
 {
 	Boolean 	handled = false;
 	FormType* 	pForm;
-
+	
+						//Err err;	
+						//char buf[50];
+							
 	switch (pEvent->eType) {
 		case menuEvent:
 			return MainFormDoCommand(pEvent->data.menu.itemID);
@@ -275,8 +502,17 @@ static Boolean MainFormHandleEvent(EventType* pEvent)
 		case frmOpenEvent:
 			pForm = FrmGetActiveForm();
 			FrmDrawForm(pForm);
-			if(ReadCfg() == errNone)
+			
+			ReadCfg();
+			
+			if(ReadMp3PathCfg() == errNone)
+			{
+				prepareFilePath();
 				playMP3();
+			}
+			
+
+			
 			handled = true;
 			break;
 			
@@ -290,6 +526,41 @@ static Boolean MainFormHandleEvent(EventType* pEvent)
 						MsgDraw("Error:PocketTunes Console Error");
 					}					
 					handled = true;
+					break;
+					
+				case 1001:
+					MsgDraw("#Unload mp3");
+					if(PocketTunesIsRunning())
+					{
+						char intervalPathName[50];
+						char *cfile = appChangeMp3File;
+						
+						strcpy(intervalPathName, &gConfStr[2]);
+						StrCat(intervalPathName, cfile);   	
+						
+						if(PocketTunesOpenFile(gVolumeName, intervalPathName, kPtunesOpenInterrupt) != errNone)
+							MsgDraw("Error:PocketTunes Open File Error");
+					}	
+					else
+						MsgDraw("Error:pTune is not running?");			
+					break;	
+
+				case 1002:
+					{	
+						UInt16 volRefNum = volumeRefNumber;
+												
+						MsgDraw(gFPathName);/*
+						err = VFSFileDelete(volRefNum, gFPathName);
+						StrPrintF(buf, "Err code:%d", err);	
+						MsgDraw(buf);
+						*/
+						if(VFSFileDelete(volRefNum, gClipboard) != errNone)
+						{
+							MsgDraw("Error:Delete File Error");
+						}					
+					}
+					break;
+					
 				default:
 					break;
 			}
@@ -323,6 +594,8 @@ static Boolean AppHandleEvent(EventType* pEvent)
 	UInt16 		formId;
 	FormType* 	pForm;
 	Boolean		handled = false;
+	char c;
+	char buf[2] = "\n";
 
 	if (pEvent->eType == frmLoadEvent) {
 		// Load the form resource.
@@ -343,6 +616,33 @@ static Boolean AppHandleEvent(EventType* pEvent)
 				break;
 		}
 		handled = true;
+	}
+	
+	if(pEvent->eType == keyDownEvent)
+	{
+		switch(pEvent->data.keyDown.chr)
+		{
+			 case chrSmall_A:
+			 	c = 'a';
+			 	break;
+			 case chrSmall_B:
+			 	c = 'b';
+			 	break;
+			 case chrSmall_C:	
+			 	c = 'c';
+			 	break;	
+			 default:
+			 	c = 0;
+			 	break;	 			 
+		}
+		
+		if(c != 0)
+		{
+			MsgDraw("Press:");
+			buf[0] = c;
+			WinDrawChars(buf, StrLen(buf), 40, x);			
+			WriteCfg(c);
+		}
 	}
 	
 	return handled;
@@ -367,7 +667,18 @@ static Boolean AppHandleEvent(EventType* pEvent)
 
 static Err AppStart(void)
 {
+	//UInt16 index;
+	//UInt16 myFetureNum = 1;
+	//void *newPrefs;
+	
 	FrmGotoForm(MainForm);
+/*	
+	if(FtrGet(myCreator, myFetureNum, &index) != 0)
+	{
+		FtrPtrNew(myCreator, myFetureNum, 16, &newPrefs);
+		
+		DmWrite(newPrefs, 0, &index, sizeof(index));
+	}*/
 
 	return errNone;
 }
